@@ -1,0 +1,25 @@
+FROM nvcr.io/nvidia/pytorch:26.05-py3 AS builder
+
+
+RUN apt update && \
+    apt install -y python3 python3-dev python3-venv
+
+COPY TensorRT-Edge-LLM /opt/tensorrt-edge-llm
+
+WORKDIR /opt/tensorrt-edge-llm
+
+RUN python3 -m venv --system-site-packages venv
+RUN . venv/bin/activate && \
+    python -m pip install --upgrade pip && \
+    python -m pip install nvidia-modelopt[hf] torchao && \
+    python -m pip install --no-deps . && \
+    sed '/^torch/d' requirements.txt > /tmp/reqs.txt && \
+    python -m pip install -r /tmp/reqs.txt
+
+
+
+FROM nvcr.io/nvidia/pytorch:26.05-py3
+
+COPY --from=builder /opt/tensorrt-edge-llm /opt/tensorrt-edge-llm
+
+RUN groupadd -g 993 render

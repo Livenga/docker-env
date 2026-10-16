@@ -1,0 +1,43 @@
+FROM nvcr.io/nvidia/cuda:13.2.1-devel-ubuntu24.04 AS builder
+
+
+RUN apt update && \
+    apt install -y cmake build-essential \
+        libnvinfer-headers-dev libnvinfer-dev libnvonnxparsers-dev libnvinfer-plugin-dev \
+        python3 python3-dev python3-venv
+
+COPY TensorRT-Edge-LLM /opt/tensorrt-edge-llm
+
+RUN mkdir /opt/tensorrt-edge-llm/build
+WORKDIR /opt/tensorrt-edge-llm/build
+
+RUN cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DTRT_PACKAGE_DIR=/usr \
+        -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64_linux_toolchain.cmake \
+        -DEMBEDDED_TARGET=jetson-thor \
+        -DCUDA_CTK_VERSION=13.0 \
+        -DENABLE_CUTE_DSL=ALL \
+        -DCMAKE_LIBRARY_PATH="/usr/local/cuda/compat" && \
+    make -j$(nproc)
+
+
+WORKDIR /opt/tensorrt-edge-llm
+
+
+RUN python3 -m venv venv && \
+    . venv/bin/activate && \
+    python -m pip install --upgrade pip && \
+    python -m pip install -e ".[server,servert-tools]"
+
+
+
+FROM nvcr.io/nvidia/cuda:13.2.1-runtime-ubuntu24.04
+
+COPY --from=builder /opt/tensorrt-edge-llm /opt/tensorrt-edge-llm
+
+RUN apt update && \
+    apt install -y libnvinfer-headers-dev libnvinfer-dev libnvonnxparsers-dev libnvinfer-plugin-dev \
+        python3 python3-dev
+
+RUN groupadd -g 993 render
